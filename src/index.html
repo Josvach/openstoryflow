@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OpenStoryflow</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ===== Top bar ===== -->
+<header id="topbar">
+  <div class="tb-left">
+    <span id="app-title">◈ OpenStoryflow</span>
+    <select id="project-select" title="Project"></select>
+    <button id="btn-new-project" class="icon-btn" title="New project">＋</button>
+    <span id="breadcrumb"></span>
+  </div>
+  <div class="tb-right">
+    <button id="btn-fit" class="tb-btn" title="Zoom to fit (⌘0)">Fit</button>
+    <button id="btn-tactics" class="tb-btn">Tactics</button>
+    <button id="btn-templates" class="tb-btn">Templates</button>
+    <button id="btn-docs" class="tb-btn">Docs</button>
+    <button id="btn-export" class="tb-btn">Export</button>
+    <button id="btn-help" class="tb-btn" title="Help & shortcuts">?</button>
+    <button id="btn-settings" class="tb-btn" title="Settings">⚙</button>
+  </div>
+</header>
+
+<!-- ===== Board tabs ===== -->
+<div id="board-tabs"></div>
+
+<!-- ===== Left toolbar ===== -->
+<nav id="toolbar">
+  <button data-tool="select" class="tool active" title="Select / pan (V, Esc)">➤</button>
+  <button data-tool="note" class="tool" title="Note (N)">▤</button>
+  <button data-tool="link" class="tool" title="Link (L)">🔗</button>
+  <button data-tool="todo" class="tool" title="To-do (T)">☑</button>
+  <button data-tool="wall" class="tool" title="Wall / section (W)">▦</button>
+  <button data-tool="folder" class="tool" title="Folder — nested canvas (F)">🗂</button>
+  <button data-tool="comment" class="tool" title="Comment (C)">💬</button>
+  <button data-tool="aiimage" class="tool" title="AI Image (G)">✨</button>
+  <button data-tool="sketch" class="tool" title="Sketch / pen (S)">✎</button>
+  <button data-tool="connect" class="tool" title="Connect cards with an arrow (A)">↗</button>
+  <button id="btn-eyedropper" class="tool" title="Eye dropper — pick a color from anywhere (I)">🎨</button>
+</nav>
+
+<!-- ===== Canvas ===== -->
+<main id="canvas">
+  <div id="world">
+    <svg id="edges" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="#9aa4b2"></path>
+        </marker>
+      </defs>
+      <g id="edge-layer"></g>
+      <g id="sketch-layer"></g>
+    </svg>
+    <div id="items"></div>
+  </div>
+  <div id="rubber-band" hidden></div>
+  <div id="align-bar" hidden>
+    <button data-align="row" title="Align in a row">⇥</button>
+    <button data-align="col" title="Align in a column">⤓</button>
+    <button data-align="grid" title="Arrange as grid">▦</button>
+    <button data-align="dist-h" title="Distribute horizontally">↔</button>
+    <button data-align="dist-v" title="Distribute vertically">↕</button>
+  </div>
+  <div id="zoom-indicator">100%</div>
+</main>
+
+<!-- ===== AI chat bar (board-level) ===== -->
+<footer id="ai-bar">
+  <div id="ai-log" hidden></div>
+  <div id="mention-menu" hidden></div>
+  <div id="ai-input-row">
+    <button id="ai-toggle-log" title="Show/hide conversation">🗨</button>
+    <select id="ai-style" title="Response style">
+      <option value="default">Default</option>
+      <option value="creative">Creative</option>
+      <option value="concise">Concise</option>
+      <option value="detailed">Detailed</option>
+    </select>
+    <textarea id="ai-input" rows="1" placeholder="Describe your idea — AI builds the board. @ to mention a Tactic, Doc or card…"></textarea>
+    <button id="ai-send">Send</button>
+  </div>
+</footer>
+
+<!-- ===== Side drawer (tactics / templates / docs) ===== -->
+<aside id="drawer" hidden>
+  <div id="drawer-head">
+    <span id="drawer-title"></span>
+    <button id="drawer-close" class="icon-btn">✕</button>
+  </div>
+  <div id="drawer-body"></div>
+</aside>
+
+<!-- ===== Generic modal ===== -->
+<div id="modal-backdrop" hidden>
+  <div id="modal">
+    <div id="modal-head"><span id="modal-title"></span><button id="modal-close" class="icon-btn">✕</button></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ===== Context menu ===== -->
+<div id="ctx-menu" hidden></div>
+
+<!-- ===== Toast ===== -->
+<div id="toast" hidden></div>
+
+<script src="js/data.js"></script>
+<script src="js/canvas.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
