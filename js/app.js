@@ -216,6 +216,12 @@ function allTactics() {
   return [...TACTICS, ...DB.customTactics];
 }
 
+const CAT_EMOJI = {
+  'Filmmaking': '🎬', 'Content Creation': '📣', 'Business': '📈', 'Personal': '🌱',
+  'Writing': '✍️', 'Your Tactics': '⭐',
+  'Productivity': '✅', 'Thinking': '🧠', 'Film': '🎬', 'Design': '🎨', 'AI': '✨'
+};
+
 function renderTacticsDrawer(body) {
   let cat = 'All', q = '';
   const cats = ['All', ...TACTIC_CATEGORIES, ...(DB.customTactics.length ? ['Your Tactics'] : [])];
@@ -234,18 +240,21 @@ function renderTacticsDrawer(body) {
       tabs.appendChild(b);
     }
     list.innerHTML = '';
+    list.className = 'lib-grid';
     const items = allTactics().filter(t =>
       (cat === 'All' || t.category === cat) &&
       (!q || (t.name + ' ' + t.desc + ' ' + t.cards.map(c => c.title).join(' ')).toLowerCase().includes(q)));
     for (const t of items) {
       const el = document.createElement('div');
       el.className = 'lib-item';
-      el.innerHTML = `<div class="li-name">${esc(t.name)}</div><div class="li-desc">${esc(t.desc || '')}</div>
-        <div class="li-meta">${esc(t.category)} · ${t.cards.length} smart cards</div>`;
+      el.dataset.cat = t.category;
+      el.innerHTML = `<div class="tile-thumb">${CAT_EMOJI[t.category] || '📚'}</div><div class="tile-body">
+        <div class="li-name">${esc(t.name)}</div><div class="li-desc">${esc(t.desc || '')}</div>
+        <div class="li-meta">${esc(t.category)} · ${t.cards.length} smart cards</div></div>`;
       el.onclick = () => previewTactic(t);
       list.appendChild(el);
     }
-    if (!items.length) list.innerHTML = '<div style="color:var(--muted)">No tactics match.</div>';
+    if (!items.length) { list.className = ''; list.innerHTML = '<div style="color:var(--muted)">No tactics match.</div>'; }
   };
   search.oninput = () => { q = search.value.toLowerCase(); refresh(); };
   body.append(tabs, search, list);
@@ -325,11 +334,14 @@ function renderTemplatesDrawer(body) {
   const refresh = () => {
     const q = search.value.toLowerCase();
     list.innerHTML = '';
+    list.className = 'lib-grid';
     for (const t of TEMPLATES.filter(t => !q || (t.name + t.desc + t.category).toLowerCase().includes(q))) {
       const el = document.createElement('div');
       el.className = 'lib-item';
-      el.innerHTML = `<div class="li-name">${esc(t.name)}</div><div class="li-desc">${esc(t.desc)}</div>
-        <div class="li-meta">${esc(t.category)}</div>`;
+      el.dataset.cat = t.category;
+      el.innerHTML = `<div class="tile-thumb">${CAT_EMOJI[t.category] || '🗂'}</div><div class="tile-body">
+        <div class="li-name">${esc(t.name)}</div><div class="li-desc">${esc(t.desc)}</div>
+        <div class="li-meta">${esc(t.category)}</div></div>`;
       el.onclick = () => { insertTemplate(t); closeDrawer(); };
       list.appendChild(el);
     }
@@ -372,7 +384,7 @@ function renderDocsDrawer(body) {
   const list = document.createElement('div');
   for (const d of project().docs) {
     const el = document.createElement('div');
-    el.className = 'lib-item doc-item';
+    el.className = 'lib-item row doc-item';
     el.innerHTML = `<div class="li-name">📄 ${esc(d.name)}</div>`;
     const delBtn = document.createElement('button');
     delBtn.className = 'icon-btn'; delBtn.textContent = '🗑';
@@ -427,7 +439,8 @@ function showExportMenu() {
   const mk = (label, desc, fn) => {
     const el = document.createElement('div');
     el.className = 'lib-item';
-    el.innerHTML = `<div class="li-name">${label}</div><div class="li-desc">${desc}</div>`;
+    el.style.marginBottom = '8px';
+    el.innerHTML = `<div class="tile-body"><div class="li-name">${label}</div><div class="li-desc">${desc}</div></div>`;
     el.onclick = () => { closeModal(); fn(); };
     wrap.appendChild(el);
   };
@@ -495,7 +508,7 @@ function showSettings() {
         <span>📎 Uploads: <b>${s.usage.uploads || 0}</b></span>
       </div></div>
     <div class="form-row"><label>Data</label>
-      <div style="color:var(--muted)">Everything is stored locally in a single JSON file in your user data folder. No accounts, no cloud, no payments.</div></div>
+      <div style="color:var(--muted)">Everything (boards, docs, images, your API key) lives in this browser's local storage (IndexedDB) — nothing is sent anywhere except your prompts to Gemini. Back up or move data via Export → Project JSON.</div></div>
     <div class="modal-actions">
       <button class="btn-danger" id="set-wipe">Erase all data</button>
       <button class="btn-primary" id="set-save">Save</button>
@@ -537,6 +550,8 @@ function showHelp(firstRun) {
     <p style="margin:10px 0 4px"><b>AI setup</b></p>
     <ul class="tips-list">
       <li>Open ⚙ Settings and paste your free Google Gemini API key (aistudio.google.com)</li>
+      <li><kbd>⌘K</kbd> focuses the AI bar from anywhere</li>
+      <li>Your data lives in this browser — use Export → Project JSON for backups</li>
     </ul>`);
 }
 
@@ -611,6 +626,13 @@ function initAIBar() {
     input.style.height = Math.min(120, input.scrollHeight) + 'px';
     const m = input.value.slice(0, input.selectionStart).match(/@([\w-]*)$/);
     if (m) showMentionMenu(m[1]); else $('#mention-menu').hidden = true;
+  });
+  // ⌘K / Ctrl+K focuses the AI bar from anywhere
+  window.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      input.focus();
+    }
   });
 }
 
@@ -743,7 +765,7 @@ async function sendBoardChat() {
     renderChatLog();
   } finally {
     send.disabled = false;
-    send.textContent = 'Send';
+    send.textContent = '➤';
   }
 }
 

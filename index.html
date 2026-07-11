@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenStoryflow</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -10,7 +12,7 @@
 <!-- ===== Top bar ===== -->
 <header id="topbar">
   <div class="tb-left">
-    <span id="app-title">◈ OpenStoryflow</span>
+    <span id="app-title"><span class="spark">✦</span> OpenStoryflow</span>
     <select id="project-select" title="Project"></select>
     <button id="btn-new-project" class="icon-btn" title="New project">＋</button>
     <span id="breadcrumb"></span>
@@ -74,15 +76,17 @@
   <div id="ai-log" hidden></div>
   <div id="mention-menu" hidden></div>
   <div id="ai-input-row">
-    <button id="ai-toggle-log" title="Show/hide conversation">🗨</button>
+    <span id="ai-spark">✦</span>
+    <textarea id="ai-input" rows="1" placeholder="Ask anything — AI builds and edits the board. Type @ to mention a Tactic, Doc or card…"></textarea>
     <select id="ai-style" title="Response style">
       <option value="default">Default</option>
       <option value="creative">Creative</option>
       <option value="concise">Concise</option>
       <option value="detailed">Detailed</option>
     </select>
-    <textarea id="ai-input" rows="1" placeholder="Describe your idea — AI builds the board. @ to mention a Tactic, Doc or card…"></textarea>
-    <button id="ai-send">Send</button>
+    <button id="ai-toggle-log" title="Show/hide conversation">🗨</button>
+    <span id="ai-kbd"><kbd>⌘</kbd><kbd>K</kbd></span>
+    <button id="ai-send" title="Send">➤</button>
   </div>
 </footer>
 
@@ -109,6 +113,8 @@
 <!-- ===== Toast ===== -->
 <div id="toast" hidden></div>
 
+<script src="js/vendor-html-to-image.js"></script>
+<script src="js/platform.js"></script>
 <script src="js/data.js"></script>
 <script src="js/canvas.js"></script>
 <script src="js/app.js"></script>
