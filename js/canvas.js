@@ -479,6 +479,20 @@ function centerOnItem(it) {
   applyView();
 }
 
+// fit a specific set of items into view (used after inserting a tactic/template
+// so the user sees exactly what was added, not the whole board zoomed out)
+function focusItems(items) {
+  const bb = boardBBox(items);
+  if (!bb) { zoomToFit(); return; }
+  const r = canvasEl().getBoundingClientRect();
+  const pad = 80;
+  const scale = Math.min(1.15, (r.width - pad * 2) / bb.w, (r.height - pad * 2) / bb.h);
+  view.scale = Math.max(0.05, scale);
+  view.x = (r.width - bb.w * view.scale) / 2 - bb.x * view.scale;
+  view.y = (r.height - bb.h * view.scale) / 2 - bb.y * view.scale;
+  applyView();
+}
+
 // viewport center in world coords — used to place new AI/template content
 function viewportCenterWorld() {
   const r = canvasEl().getBoundingClientRect();
@@ -534,8 +548,9 @@ function initCanvasEvents() {
 
     // --- creation tools (click places the object) ---
     if (!['select', 'connect'].includes(activeTool) && !cardEl) {
-      handleCreateTool(activeTool, w);
-      if (!e.shiftKey) setTool('select');
+      const tool = activeTool;
+      if (!e.shiftKey) setTool('select'); // reset tool FIRST so its re-render can't wipe the new card's edit mode
+      handleCreateTool(tool, w);
       return;
     }
 
@@ -785,16 +800,19 @@ function initCanvasEvents() {
   $('#zoom-pct').onclick = () => { view.scale = 1; applyView(); };
 }
 
-// put a note card body into edit mode
+// put a note card body into edit mode. Deferred a frame so any trailing
+// mousedown/click from the creating gesture can't blur it first.
 function startNoteEdit(it) {
-  const cardEl = document.querySelector(`.card[data-id="${it.id}"]`);
-  if (!cardEl) return;
-  const body = cardEl.querySelector('.card-body');
-  body.contentEditable = 'true';
-  body.focus();
-  const sel = window.getSelection(); sel.selectAllChildren(body); sel.collapseToEnd();
-  body.onblur = () => { it.content = body.innerText; body.contentEditable = 'false'; save(); renderBoard(); };
-  body.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === 'Escape') body.blur(); };
+  requestAnimationFrame(() => {
+    const cardEl = document.querySelector(`.card[data-id="${it.id}"]`);
+    if (!cardEl) return;
+    const body = cardEl.querySelector('.card-body');
+    body.contentEditable = 'true';
+    body.focus();
+    const sel = window.getSelection(); sel.selectAllChildren(body); sel.collapseToEnd();
+    body.onblur = () => { it.content = body.innerText; body.contentEditable = 'false'; save(); renderBoard(); };
+    body.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === 'Escape') body.blur(); };
+  });
 }
 
 async function addDroppedFile(f, x, y) {
@@ -951,8 +969,14 @@ function handleCreateTool(tool, w) {
     });
     return;
   }
-  const it = createItem(tool, w.x, w.y);
-  if (tool === 'note') startNoteEdit(it);
+  // center new notes on the cursor so the click lands on the editable body, not the header
+  if (tool === 'note') {
+    const [cw, ch] = defaultsFor('note');
+    const it = createItem('note', w.x - cw / 2, w.y - ch / 2);
+    startNoteEdit(it);
+    return;
+  }
+  createItem(tool, w.x, w.y);
 }
 
 async function createLinkCard(url, x, y) {

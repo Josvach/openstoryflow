@@ -102,18 +102,28 @@ button svg.ic { pointer-events: none; }
 #edges path.sketch.selected { filter: drop-shadow(0 0 4px var(--accent)); }
 #items { position: absolute; left: 0; top: 0; }
 
-/* ---- Cards ---- */
+/* ---- Cards ----
+   Cards are tinted toward their own color and sit clearly lighter than the
+   canvas, plus a colored accent bar on the left, so every card is legible
+   against the dark background (Milanote-style). */
 .card {
   position: absolute; border-radius: var(--radius);
-  background: var(--panel); border: 1px solid var(--border);
-  box-shadow: 0 6px 20px rgba(0,0,0,.35); display: flex; flex-direction: column;
+  background:
+    linear-gradient(color-mix(in srgb, var(--card-color, #5b7cfa) 10%, #2b2b32),
+                    color-mix(in srgb, var(--card-color, #5b7cfa) 6%, #26262c));
+  border: 1px solid color-mix(in srgb, var(--card-color, #5b7cfa) 30%, #3a3a42);
+  box-shadow: 0 8px 22px rgba(0,0,0,.45); display: flex; flex-direction: column;
   overflow: hidden;
+}
+.card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: var(--card-color, #5b7cfa); opacity: .9;
 }
 .card.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
 .card.connect-src { outline: 2px dashed var(--accent2); }
 .card-head {
-  display: flex; align-items: center; gap: 8px; padding: 8px 11px;
-  font-weight: 600; font-size: 12.5px; cursor: move; flex: none;
+  display: flex; align-items: center; gap: 8px; padding: 8px 11px 8px 14px;
+  font-weight: 600; font-size: 12.5px; cursor: move; flex: none; color: #f2f2f4;
 }
 .card-head .ttl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-head .type-ico {
@@ -124,8 +134,8 @@ button svg.ic { pointer-events: none; }
 .card-ai-btn { flex: none; opacity: 0; font-size: 12px; padding: 0 4px; border-radius: 4px; }
 .card:hover .card-ai-btn { opacity: .8; }
 .card-ai-btn:hover { background: rgba(255,255,255,.15); opacity: 1 !important; }
-.card-body { flex: 1; padding: 4px 12px 10px; overflow: auto; font-size: 12.5px; white-space: pre-wrap; user-select: text; color: #c9c9cf; }
-.card-body:empty::before { content: 'Double-click to edit…'; color: rgba(140,140,150,.55); }
+.card-body { flex: 1; padding: 4px 12px 10px 14px; overflow: auto; font-size: 12.5px; white-space: pre-wrap; user-select: text; color: #dcdce2; }
+.card-body:empty::before { content: 'Double-click to edit…'; color: rgba(180,180,190,.5); }
 .card-body[contenteditable="true"] { outline: none; background: rgba(255,255,255,.04); cursor: text; }
 .card .resize-handle {
   position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize;
@@ -141,11 +151,12 @@ button svg.ic { pointer-events: none; }
    The wall body is transparent to the pointer — only its header and resize
    handle are interactive, so selecting/panning INSIDE a wall still works. */
 .card[data-type="wall"] {
-  background: color-mix(in srgb, var(--card-color, #3d4451) 14%, transparent);
+  background: color-mix(in srgb, var(--card-color, #3d4451) 12%, rgba(30,30,36,.4));
   border: 1px solid color-mix(in srgb, var(--card-color, #3d4451) 55%, transparent);
   box-shadow: none; overflow: visible; border-radius: 18px;
   pointer-events: none;
 }
+.card[data-type="wall"]::before { display: none; }
 .card[data-type="wall"] .card-head, .card[data-type="wall"] .resize-handle { pointer-events: auto; }
 .card[data-type="wall"] .card-head {
   font-size: 14.5px; padding: 12px 16px 9px; display: block;
@@ -167,6 +178,7 @@ button svg.ic { pointer-events: none; }
 .card[data-type="image"], .card[data-type="aiimage"] {
   border: 1.5px solid #4a4a52; border-radius: 16px;
 }
+.card[data-type="image"]::before { display: none; }
 
 .card[data-type="file"] .card-body { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .card[data-type="file"] video, .card[data-type="file"] audio { width: 100%; }

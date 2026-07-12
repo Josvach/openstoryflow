@@ -301,21 +301,22 @@ function addTacticToCanvas(t) {
   const CW = 250, CH = 175, GAP = 22;
   const rows = Math.ceil(t.cards.length / cols);
   const x0 = c.x - (cols * (CW + GAP)) / 2, y0 = c.y - (rows * (CH + GAP)) / 2;
+  const created = [];
   // backing wall so the tactic reads as one unit
-  createItem('wall', x0 - 30, y0 - 64, {
+  created.push(createItem('wall', x0 - 30, y0 - 64, {
     title: t.name, w: cols * (CW + GAP) + 60 - GAP, h: rows * (CH + GAP) + 94 - GAP, color: '#3d4451'
-  });
+  }));
   const ids = [];
   t.cards.forEach((card, i) => {
     const it = createItem('note', x0 + (i % cols) * (CW + GAP), y0 + Math.floor(i / cols) * (CH + GAP), {
       title: card.title, content: card.content || '', purpose: card.purpose,
-      tactic: t.name, color: '#e8eaed', w: CW, h: CH
+      tactic: t.name, color: '#8ab4f8', w: CW, h: CH
     });
-    ids.push(it.id);
+    created.push(it); ids.push(it.id);
   });
   save(); renderBoard();
   setSelection(ids);
-  zoomToFit();
+  focusItems(created);
   toast(`"${t.name}" added — every card has its own AI assistant`);
 }
 
@@ -365,15 +366,19 @@ function insertTemplate(t) {
   const bb = boardBBox(t.items.map(i => ({ ...i, w: i.w || 220, h: i.h || 120 })));
   const ox = c.x - bb.x - bb.w / 2, oy = c.y - bb.y - bb.h / 2;
   const keyMap = {};
+  const created = [];
   for (const spec of t.items) {
     const { key, type, x, y, ...rest } = spec;
     const it = createItem(type, x + ox, y + oy, { ...rest });
+    created.push(it);
     if (key) keyMap[key] = it.id;
   }
   for (const [a, b] of t.connections || []) {
     if (keyMap[a] && keyMap[b]) board().connections.push({ id: uid(), from: keyMap[a], to: keyMap[b] });
   }
-  save(); renderBoard(); zoomToFit();
+  save(); renderBoard();
+  setSelection(created.filter(i => i.type !== 'wall').map(i => i.id));
+  focusItems(created);
   toast(`Template "${t.name}" added — everything is editable`);
 }
 
