@@ -1,5 +1,12 @@
 // ============================================================
 // OpenStoryflow — infinite canvas engine
+// Interaction model (Miro/Milanote conventions):
+//   two-finger scroll / wheel  → pan
+//   pinch or ⌘/Ctrl + wheel    → zoom toward cursor
+//   drag on empty canvas       → rubber-band select
+//   Space / middle button / H  → pan (hand)
+//   drag a card                → move · ⌥ duplicates · Shift multi-select
+//   double-click empty canvas  → quick note
 // Shared app state lives here (this file loads before app.js).
 // ============================================================
 
@@ -7,12 +14,13 @@ let DB = null;                        // whole persisted database (loaded in app
 let cur = { projectId: null, boardId: null, path: [] };  // path = folder breadcrumb of board ids
 let view = { x: 0, y: 0, scale: 1 };  // canvas transform
 let selection = new Set();            // selected item ids
-let activeTool = 'select';            // select | note | link | todo | wall | folder | comment | aiimage | sketch | connect
+let activeTool = 'select';            // select | hand | note | link | todo | wall | folder | comment | aiimage | sketch | connect
 let connectSrc = null;                // first card picked in connect mode
 let spaceHeld = false;
 
 const CARD_COLORS = ['#f5d76e', '#8ab4f8', '#a8d5b5', '#f0a8a8', '#c5b3e6', '#f0c390', '#e8eaed', '#3d4451'];
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+const DRAG_T = 4; // px of movement before a press becomes a drag
 
 const $ = (s) => document.querySelector(s);
 const canvasEl = () => $('#canvas');
@@ -29,7 +37,18 @@ function screenToWorld(sx, sy) {
 }
 function applyView() {
   worldEl().style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
-  $('#zoom-indicator').textContent = Math.round(view.scale * 100) + '%';
+  const z = $('#zoom-pct');
+  if (z) z.textContent = Math.round(view.scale * 100) + '%';
+}
+function zoomBy(factor, cx, cy) {
+  const r = canvasEl().getBoundingClientRect();
+  const mx = (cx ?? r.left + r.width / 2) - r.left;
+  const my = (cy ?? r.top + r.height / 2) - r.top;
+  const ns = Math.min(4, Math.max(0.05, view.scale * factor));
+  view.x = mx - (mx - view.x) * (ns / view.scale);
+  view.y = my - (my - view.y) * (ns / view.scale);
+  view.scale = ns;
+  applyView();
 }
 
 // ---------- rendering ----------
@@ -46,9 +65,11 @@ function renderBoard() {
   updateAlignBar();
 }
 
-function itemIcon(t) {
-  return { note: '▤', link: '🔗', todo: '☑', wall: '▦', folder: '🗂', comment: '💬',
-    aiimage: '✨', image: '🖼', file: '📄', sketch: '✎' }[t] || '▤';
+function itemIconName(t) {
+  return {
+    note: 'sticky-note', link: 'link', todo: 'list-checks', wall: 'frame', folder: 'folder',
+    comment: 'message-circle', aiimage: 'sparkles', image: 'image', file: 'file', sketch: 'pen-line'
+  }[t] || 'sticky-note';
 }
 
 function buildItemEl(it) {
@@ -61,9 +82,9 @@ function buildItemEl(it) {
 
   const head = document.createElement('div');
   head.className = 'card-head';
-  head.innerHTML = `<span class="type-ico">${itemIcon(it.type)}</span><span class="ttl">${esc(it.title || '')}</span>`;
+  head.innerHTML = `<span class="type-ico">${icon(itemIconName(it.type), 12)}</span><span class="ttl">${esc(it.title || '')}</span>`;
   const aiBtn = document.createElement('button');
-  aiBtn.className = 'card-ai-btn'; aiBtn.textContent = '✨'; aiBtn.title = 'Card AI assistant';
+  aiBtn.className = 'card-ai-btn'; aiBtn.innerHTML = icon('sparkles', 13); aiBtn.title = 'Card AI assistant';
   aiBtn.onclick = (e) => { e.stopPropagation(); openCardAI(it.id); };
   head.appendChild(aiBtn);
   el.appendChild(head);
@@ -113,7 +134,7 @@ function fillBody(it, body, el) {
         const cb = document.createElement('input');
         cb.type = 'checkbox'; cb.checked = !!t.done;
         cb.onchange = () => { t.done = cb.checked; save(); renderBoard(); };
-        cb.onmousedown = (e) => e.stopPropagation();
+        cb.onpointerdown = (e) => e.stopPropagation();
         const txt = document.createElement('span');
         txt.className = 'todo-text'; txt.textContent = t.text;
         txt.ondblclick = (e) => {
@@ -125,7 +146,7 @@ function fillBody(it, body, el) {
       }
       const add = document.createElement('div');
       add.className = 'todo-add'; add.textContent = '＋ add item';
-      add.onmousedown = (e) => e.stopPropagation();
+      add.onpointerdown = (e) => e.stopPropagation();
       add.onclick = (e) => {
         e.stopPropagation();
         it.todos = it.todos || [];
@@ -144,7 +165,7 @@ function fillBody(it, body, el) {
       }
       const inp = document.createElement('input');
       inp.placeholder = it.resolved ? 'Resolved ✓' : 'Reply…';
-      inp.onmousedown = (e) => e.stopPropagation();
+      inp.onpointerdown = (e) => e.stopPropagation();
       inp.onkeydown = (e) => {
         e.stopPropagation();
         if (e.key === 'Enter' && inp.value.trim()) {
@@ -170,26 +191,26 @@ function fillBody(it, body, el) {
       if (it.mime?.startsWith('video/')) {
         const v = document.createElement('video');
         v.src = it.dataUrl; v.controls = true;
-        v.onmousedown = (e) => e.stopPropagation();
+        v.onpointerdown = (e) => e.stopPropagation();
         body.appendChild(v);
         const cap = document.createElement('button');
-        cap.className = 'btn-secondary'; cap.textContent = '📸 Capture frame';
+        cap.className = 'btn-secondary'; cap.innerHTML = icon('camera', 13) + ' Capture frame';
         cap.style.marginTop = '6px';
-        cap.onmousedown = (e) => e.stopPropagation();
+        cap.onpointerdown = (e) => e.stopPropagation();
         cap.onclick = (e) => { e.stopPropagation(); captureVideoFrame(it, v); };
         body.appendChild(cap);
         body.style.flexDirection = 'column';
       } else if (it.mime?.startsWith('audio/')) {
         const a = document.createElement('audio');
         a.src = it.dataUrl; a.controls = true;
-        a.onmousedown = (e) => e.stopPropagation();
+        a.onpointerdown = (e) => e.stopPropagation();
         body.appendChild(a);
       } else {
-        body.innerHTML = `<span style="font-size:22px">📄</span> ${esc(it.fileName || 'file')}`;
+        body.innerHTML = `${icon('file', 20)} <span>${esc(it.fileName || 'file')}</span>`;
         if (it.mime === 'application/pdf' || /\.(pdf|txt|md)$/i.test(it.fileName || '')) {
           const open = document.createElement('button');
           open.className = 'btn-secondary'; open.textContent = 'Open';
-          open.onmousedown = (e) => e.stopPropagation();
+          open.onpointerdown = (e) => e.stopPropagation();
           open.onclick = (e) => { e.stopPropagation(); openFilePreview(it); };
           body.appendChild(open);
         }
@@ -210,7 +231,7 @@ function inlineEdit(elem, initial, onDone) {
   inp.style.width = '95%';
   elem.replaceWith(inp);
   inp.focus(); inp.select();
-  inp.onmousedown = (e) => e.stopPropagation();
+  inp.onpointerdown = (e) => e.stopPropagation();
   const finish = () => onDone(inp.value);
   inp.onblur = finish;
   inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') { inp.onblur = null; renderBoard(); } };
@@ -219,7 +240,6 @@ function inlineEdit(elem, initial, onDone) {
 // ---------- edges & sketches ----------
 function edgePath(a, b) {
   const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
-  // clip line to card borders (approximate: shrink toward centers)
   const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
   const ar = Math.min(a.w, a.h) / 2, br = Math.min(b.w, b.h) / 2;
   const sx = ax + dx / len * ar * 0.9, sy = ay + dy / len * ar * 0.9;
@@ -251,6 +271,21 @@ function renderEdges() {
     };
     g.appendChild(p);
   }
+}
+
+// live preview line while picking a connect target
+function renderConnectPreview(wx, wy) {
+  let p = document.getElementById('connect-preview');
+  if (!connectSrc || wx === undefined) { if (p) p.remove(); return; }
+  const src = itemById(connectSrc);
+  if (!src) return;
+  if (!p) {
+    p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.id = 'connect-preview';
+    p.setAttribute('class', 'edge preview');
+    $('#edge-layer').appendChild(p);
+  }
+  p.setAttribute('d', edgePath(src, { x: wx, y: wy, w: 1, h: 1 }));
 }
 
 function renderSketches() {
@@ -343,7 +378,6 @@ function duplicateItems(ids, offset = 24) {
     c.x += offset; c.y += offset;
     if (c.type === 'sketch') c.points = c.points.map(p => [p[0] + offset, p[1] + offset]);
     if (c.type === 'folder' && it.boardId) {
-      // duplicate the nested board too (shallow: one level of deep-copy via recursion)
       c.boardId = cloneBoardTree(it.boardId, c.id);
     }
     board().items.push(c);
@@ -430,7 +464,7 @@ function zoomToFit() {
   const r = canvasEl().getBoundingClientRect();
   if (!bb) { view = { x: r.width / 2, y: r.height / 2, scale: 1 }; applyView(); return; }
   const pad = 60;
-  const scale = Math.min(2, Math.min((r.width - pad * 2) / bb.w, (r.height - pad * 2) / bb.h));
+  const scale = Math.min(1.5, Math.min((r.width - pad * 2) / bb.w, (r.height - pad * 2) / bb.h));
   view.scale = Math.max(0.05, scale);
   view.x = (r.width - bb.w * view.scale) / 2 - bb.x * view.scale;
   view.y = (r.height - bb.h * view.scale) / 2 - bb.y * view.scale;
@@ -455,21 +489,39 @@ function viewportCenterWorld() {
 function setTool(t) {
   activeTool = t;
   connectSrc = null;
+  renderConnectPreview();
   document.querySelectorAll('#toolbar .tool[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
-  canvasEl().classList.toggle('tool-active', t !== 'select');
+  const cv = canvasEl();
+  cv.classList.toggle('tool-active', !['select', 'hand'].includes(t));
+  cv.classList.toggle('hand', t === 'hand');
   renderBoard();
 }
 
 // ---------- pointer interactions ----------
 function initCanvasEvents() {
   const cv = canvasEl();
-  let drag = null; // {mode:'pan'|'move'|'resize'|'rubber'|'sketch', ...}
+  let drag = null; // {mode, started, ...}
 
-  cv.addEventListener('mousedown', (e) => {
-    if (e.target.closest('#align-bar') || e.target.closest('input, textarea, select, button, a, [contenteditable="true"], video, audio')) return;
+  const isInteractive = (t) =>
+    !!(t.closest && (t.closest('#align-bar, #zoom-controls') ||
+    t.closest('input, textarea, select, button, a, [contenteditable="true"], video, audio')));
+
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.button === 2) return;                 // right button → contextmenu handler
+    if (isInteractive(e.target)) return;
+    hideCtxMenu();
     const w = screenToWorld(e.clientX, e.clientY);
     const cardEl = e.target.closest('.card');
     const sketchEl = e.target.closest('path.sketch');
+    const pan = e.button === 1 || spaceHeld || activeTool === 'hand';
+
+    // --- pan (hand / space / middle button) ---
+    if (pan) {
+      drag = { mode: 'pan', sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y };
+      cv.classList.add('panning');
+      e.preventDefault();
+      return;
+    }
 
     // --- sketch tool: draw ---
     if (activeTool === 'sketch') {
@@ -480,8 +532,8 @@ function initCanvasEvents() {
       return;
     }
 
-    // --- creation tools ---
-    if (activeTool !== 'select' && activeTool !== 'connect' && !cardEl) {
+    // --- creation tools (click places the object) ---
+    if (!['select', 'connect'].includes(activeTool) && !cardEl) {
       handleCreateTool(activeTool, w);
       if (!e.shiftKey) setTool('select');
       return;
@@ -491,11 +543,12 @@ function initCanvasEvents() {
     if (activeTool === 'connect') {
       if (cardEl) {
         const id = cardEl.dataset.id;
-        if (!connectSrc) { connectSrc = id; renderBoard(); }
+        if (!connectSrc) { connectSrc = id; renderBoard(); toast('Now click the target card'); }
         else if (connectSrc !== id) {
           board().connections = board().connections || [];
           board().connections.push({ id: uid(), from: connectSrc, to: id });
           connectSrc = null;
+          renderConnectPreview();
           save(); setTool('select');
         }
       }
@@ -510,65 +563,65 @@ function initCanvasEvents() {
       return;
     }
 
-    // --- move card(s) ---
+    // --- press on a card: select now, move after threshold ---
     if (cardEl) {
       const id = cardEl.dataset.id;
       if (!selection.has(id)) setSelection(e.shiftKey ? [...selection, id] : [id]);
       else if (e.shiftKey) { const s = new Set(selection); s.delete(id); setSelection([...s]); return; }
-      let ids = [...selection];
-      if (e.altKey) ids = duplicateItems(ids, 0).map(c => c.id); // alt-drag duplicates, then move the copies
-      const targets = ids.map(itemById).filter(Boolean);
-      // a wall drags everything sitting inside it (unless also selected separately)
-      const extra = [];
-      for (const t of targets) {
-        if (t.type === 'wall') {
-          for (const other of board().items) {
-            if (other.id !== t.id && !ids.includes(other.id) && other.type !== 'sketch' &&
-                other.x >= t.x && other.y >= t.y && other.x + other.w <= t.x + t.w && other.y + other.h <= t.y + t.h) {
-              extra.push(other);
-            }
-          }
-        }
-      }
-      drag = { mode: 'move', targets: [...targets, ...extra], sx: w.x, sy: w.y,
-        orig: [...targets, ...extra].map(t => ({ x: t.x, y: t.y })) , moved: false };
-      e.preventDefault();
+      drag = { mode: 'move', started: false, alt: e.altKey, sx: e.clientX, sy: e.clientY, wx: w.x, wy: w.y };
       return;
     }
 
-    // --- sketch select/move ---
+    // --- press on a sketch path ---
     if (sketchEl) {
       const it = itemById(sketchEl.dataset.id);
       setSelection(e.shiftKey ? [...selection, it.id] : [it.id]);
       drag = { mode: 'move-sketch', it, sx: w.x, sy: w.y, orig: it.points.map(p => [...p]) };
-      e.preventDefault();
       return;
     }
 
-    // --- empty space: pan (default) or rubber-band (shift) ---
-    if (e.button === 1 || spaceHeld || (!e.shiftKey && e.button === 0)) {
-      drag = { mode: 'pan', sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y };
-      cv.classList.add('panning');
-    } else if (e.shiftKey) {
-      drag = { mode: 'rubber', sx: e.clientX, sy: e.clientY };
-      const rb = $('#rubber-band');
-      rb.hidden = false;
-      Object.assign(rb.style, { left: e.clientX + 'px', top: e.clientY + 'px', width: 0, height: 0 });
-    }
-    if (!e.shiftKey) setSelection([]);
-    hideCtxMenu();
+    // --- empty canvas: rubber-band select (plain click = deselect) ---
+    drag = { mode: 'rubber', started: false, sx: e.clientX, sy: e.clientY, shift: e.shiftKey, base: e.shiftKey ? [...selection] : [] };
   });
 
-  window.addEventListener('mousemove', (e) => {
+  window.addEventListener('pointermove', (e) => {
+    if (activeTool === 'connect' && connectSrc) {
+      const wc = screenToWorld(e.clientX, e.clientY);
+      renderConnectPreview(wc.x, wc.y);
+    }
     if (!drag) return;
     const w = screenToWorld(e.clientX, e.clientY);
+
     if (drag.mode === 'pan') {
       view.x = drag.ox + e.clientX - drag.sx;
       view.y = drag.oy + e.clientY - drag.sy;
       applyView();
-    } else if (drag.mode === 'move') {
-      const dx = w.x - drag.sx, dy = w.y - drag.sy;
-      if (Math.abs(dx) + Math.abs(dy) > 1) drag.moved = true;
+      return;
+    }
+
+    if (drag.mode === 'move') {
+      if (!drag.started) {
+        if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < DRAG_T) return;
+        drag.started = true;
+        let ids = [...selection];
+        if (drag.alt) ids = duplicateItems(ids, 0).map(c => c.id); // ⌥-drag duplicates, then moves the copies
+        const targets = ids.map(itemById).filter(Boolean);
+        // a wall drags everything visually inside it
+        const extra = [];
+        for (const t of targets) {
+          if (t.type === 'wall') {
+            for (const other of board().items) {
+              if (other.id !== t.id && !ids.includes(other.id) && other.type !== 'sketch' &&
+                  other.x >= t.x && other.y >= t.y && other.x + other.w <= t.x + t.w && other.y + other.h <= t.y + t.h) {
+                extra.push(other);
+              }
+            }
+          }
+        }
+        drag.targets = [...targets, ...extra];
+        drag.orig = drag.targets.map(t => ({ x: t.x, y: t.y }));
+      }
+      const dx = w.x - drag.wx, dy = w.y - drag.wy;
       drag.targets.forEach((t, i) => {
         t.x = Math.round(drag.orig[i].x + dx);
         t.y = Math.round(drag.orig[i].y + dy);
@@ -576,65 +629,104 @@ function initCanvasEvents() {
         if (el) { el.style.left = t.x + 'px'; el.style.top = t.y + 'px'; }
       });
       renderEdges();
-    } else if (drag.mode === 'move-sketch') {
+      return;
+    }
+
+    if (drag.mode === 'move-sketch') {
       const dx = w.x - drag.sx, dy = w.y - drag.sy;
       drag.it.points = drag.orig.map(p => [p[0] + dx, p[1] + dy]);
       renderSketches();
-    } else if (drag.mode === 'resize') {
+      return;
+    }
+
+    if (drag.mode === 'resize') {
       drag.it.w = Math.max(80, Math.round(drag.ow + w.x - drag.sx));
       drag.it.h = Math.max(50, Math.round(drag.oh + w.y - drag.sy));
       const el = document.querySelector(`.card[data-id="${drag.it.id}"]`);
       if (el) { el.style.width = drag.it.w + 'px'; el.style.height = drag.it.h + 'px'; }
       renderEdges();
-    } else if (drag.mode === 'rubber') {
+      return;
+    }
+
+    if (drag.mode === 'rubber') {
+      if (!drag.started) {
+        if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < DRAG_T) return;
+        drag.started = true;
+        $('#rubber-band').hidden = false;
+      }
+      const r = cv.getBoundingClientRect();
       const rb = $('#rubber-band');
-      const x = Math.min(e.clientX, drag.sx), y = Math.min(e.clientY, drag.sy);
-      Object.assign(rb.style, { left: x + 'px', top: y + 'px',
-        width: Math.abs(e.clientX - drag.sx) + 'px', height: Math.abs(e.clientY - drag.sy) + 'px' });
-      // live-select
+      Object.assign(rb.style, {
+        left: (Math.min(e.clientX, drag.sx) - r.left) + 'px',
+        top: (Math.min(e.clientY, drag.sy) - r.top) + 'px',
+        width: Math.abs(e.clientX - drag.sx) + 'px',
+        height: Math.abs(e.clientY - drag.sy) + 'px'
+      });
       const a = screenToWorld(Math.min(e.clientX, drag.sx), Math.min(e.clientY, drag.sy));
       const b2 = screenToWorld(Math.max(e.clientX, drag.sx), Math.max(e.clientY, drag.sy));
       const hit = board().items.filter(i => i.type !== 'sketch' &&
         i.x < b2.x && i.x + i.w > a.x && i.y < b2.y && i.y + i.h > a.y).map(i => i.id);
-      setSelection(hit);
-    } else if (drag.mode === 'sketch') {
+      setSelection([...new Set([...drag.base, ...hit])]);
+      return;
+    }
+
+    if (drag.mode === 'sketch') {
       drag.it.points.push([w.x, w.y]);
       renderSketches();
     }
   });
 
-  window.addEventListener('mouseup', () => {
+  const endDrag = () => {
     if (!drag) return;
-    if (drag.mode === 'move' || drag.mode === 'resize' || drag.mode === 'move-sketch') save();
+    if (drag.mode === 'move' && drag.started) save();
+    if (drag.mode === 'resize' || drag.mode === 'move-sketch') save();
     if (drag.mode === 'sketch') {
       if (drag.it.points.length < 3) board().items = board().items.filter(i => i.id !== drag.it.id);
       save(); renderSketches();
     }
-    if (drag.mode === 'rubber') $('#rubber-band').hidden = true;
-    canvasEl().classList.remove('panning');
+    if (drag.mode === 'rubber') {
+      $('#rubber-band').hidden = true;
+      if (!drag.started && !drag.shift) setSelection([]); // plain click on empty = deselect
+    }
+    cv.classList.remove('panning');
     drag = null;
-  });
+  };
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
 
-  // wheel: zoom toward cursor (pinch on trackpad sends ctrl+wheel; plain wheel also zooms)
+  // wheel: scroll pans (trackpad two-finger), pinch / ⌘⌃+wheel zooms toward cursor
   cv.addEventListener('wheel', (e) => {
     e.preventDefault();
-    if (!e.ctrlKey && (Math.abs(e.deltaX) > Math.abs(e.deltaY))) {
-      view.x -= e.deltaX; applyView(); return; // horizontal trackpad swipe pans
+    if (e.ctrlKey || e.metaKey) {
+      zoomBy(Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
+    } else {
+      const k = e.deltaMode === 1 ? 24 : 1; // line-mode mouse wheels
+      view.x -= e.deltaX * k;
+      view.y -= e.deltaY * k;
+      applyView();
     }
-    const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
-    const r = cv.getBoundingClientRect();
-    const mx = e.clientX - r.left, my = e.clientY - r.top;
-    const ns = Math.min(4, Math.max(0.05, view.scale * factor));
-    view.x = mx - (mx - view.x) * (ns / view.scale);
-    view.y = my - (my - view.y) * (ns / view.scale);
-    view.scale = ns;
-    applyView();
   }, { passive: false });
 
-  // double-click: edit note body / open folder / center other cards / fit on empty
+  // Safari trackpad pinch (gesture events)
+  let gestureScale = 1;
+  cv.addEventListener('gesturestart', (e) => { e.preventDefault(); gestureScale = e.scale; });
+  cv.addEventListener('gesturechange', (e) => {
+    e.preventDefault();
+    zoomBy(e.scale / gestureScale, e.clientX, e.clientY);
+    gestureScale = e.scale;
+  });
+  cv.addEventListener('gestureend', (e) => e.preventDefault());
+
+  // double-click: edit / open folder / quick note on empty canvas
   cv.addEventListener('dblclick', (e) => {
+    if (isInteractive(e.target)) return;
     const cardEl = e.target.closest('.card');
-    if (!cardEl) { zoomToFit(); return; }
+    if (!cardEl) {
+      const w = screenToWorld(e.clientX, e.clientY);
+      const it = createItem('note', w.x - 110, w.y - 60);
+      startNoteEdit(it);
+      return;
+    }
     const it = itemById(cardEl.dataset.id);
     if (!it) return;
     if (e.target.classList.contains('ttl')) {
@@ -642,15 +734,7 @@ function initCanvasEvents() {
       return;
     }
     if (it.type === 'folder') { enterFolder(it); return; }
-    if (it.type === 'note' && e.target.closest('.card-body')) {
-      const body = cardEl.querySelector('.card-body');
-      body.contentEditable = 'true';
-      body.focus();
-      const sel = window.getSelection(); sel.selectAllChildren(body); sel.collapseToEnd();
-      body.onblur = () => { it.content = body.innerText; body.contentEditable = 'false'; save(); };
-      body.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === 'Escape') body.blur(); };
-      return;
-    }
+    if (it.type === 'note') { startNoteEdit(it); return; }
     centerOnItem(it);
   });
 
@@ -693,6 +777,24 @@ function initCanvasEvents() {
   document.querySelectorAll('#align-bar button').forEach(b => {
     b.onclick = () => alignSelection(b.dataset.align);
   });
+
+  // zoom controls
+  $('#zoom-out').onclick = () => zoomBy(1 / 1.25);
+  $('#zoom-in').onclick = () => zoomBy(1.25);
+  $('#zoom-fit').onclick = zoomToFit;
+  $('#zoom-pct').onclick = () => { view.scale = 1; applyView(); };
+}
+
+// put a note card body into edit mode
+function startNoteEdit(it) {
+  const cardEl = document.querySelector(`.card[data-id="${it.id}"]`);
+  if (!cardEl) return;
+  const body = cardEl.querySelector('.card-body');
+  body.contentEditable = 'true';
+  body.focus();
+  const sel = window.getSelection(); sel.selectAllChildren(body); sel.collapseToEnd();
+  body.onblur = () => { it.content = body.innerText; body.contentEditable = 'false'; save(); renderBoard(); };
+  body.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === 'Escape') body.blur(); };
 }
 
 async function addDroppedFile(f, x, y) {
@@ -734,9 +836,9 @@ function enterFolder(it) {
 function showCtxMenu(x, y, it) {
   const m = $('#ctx-menu');
   m.innerHTML = '';
-  const add = (label, fn, cls = '') => {
+  const add = (ic, label, fn, cls = '') => {
     const d = document.createElement('div');
-    d.className = 'ci ' + cls; d.innerHTML = label;
+    d.className = 'ci ' + cls; d.innerHTML = icon(ic, 14) + `<span>${label}</span>`;
     d.onclick = () => { hideCtxMenu(); fn(); };
     m.appendChild(d);
   };
@@ -751,45 +853,54 @@ function showCtxMenu(x, y, it) {
     }
     m.appendChild(colors);
     m.appendChild(document.createElement('hr'));
-    add('✨ Ask AI about this card', () => openCardAI(it.id));
-    add('✏️ Rename', () => {
+    add('sparkles', 'Ask AI about this card', () => openCardAI(it.id));
+    add('pencil', 'Rename', () => {
       const el = document.querySelector(`.card[data-id="${it.id}"] .ttl`);
       if (el) inlineEdit(el, it.title || '', (v) => { it.title = v; save(); renderBoard(); });
     });
-    add('↗ Connect to…', () => { setTool('connect'); connectSrc = it.id; renderBoard(); toast('Now click the target card'); });
-    add('💬 Add comment here', () => createItem('comment', it.x + it.w + 20, it.y, { title: 'Comment on ' + (it.title || 'card') }));
-    if (it.type === 'comment') add(it.resolved ? '↺ Reopen' : '✓ Resolve', () => { it.resolved = !it.resolved; save(); renderBoard(); });
-    add('⧉ Duplicate (⌥drag)', () => duplicateItems([...selection]));
-    if (selection.size >= 2) add('💾 Save selection as custom Tactic', () => saveSelectionAsTactic());
-    add('🖼 Export selection as PNG', () => exportSelectionPNG());
+    add('arrow-up-right', 'Connect to…', () => { setTool('connect'); connectSrc = it.id; renderBoard(); toast('Now click the target card'); });
+    add('message-circle', 'Add comment here', () => createItem('comment', it.x + it.w + 20, it.y, { title: 'Comment on ' + (it.title || 'card') }));
+    if (it.type === 'comment') add('check-check', it.resolved ? 'Reopen' : 'Resolve', () => { it.resolved = !it.resolved; save(); renderBoard(); });
+    add('copy', 'Duplicate (⌥drag)', () => duplicateItems([...selection]));
+    if (selection.size >= 2) add('star', 'Save selection as custom Tactic', () => saveSelectionAsTactic());
+    add('image', 'Export selection as PNG', () => exportSelectionPNG());
     m.appendChild(document.createElement('hr'));
   }
-  add('🗑 Delete', () => deleteItems([...selection]), 'danger');
+  add('trash-2', 'Delete', () => deleteItems([...selection]), 'danger');
   m.hidden = false;
   const mw = m.offsetWidth, mh = m.offsetHeight;
   m.style.left = Math.min(x, innerWidth - mw - 8) + 'px';
   m.style.top = Math.min(y, innerHeight - mh - 8) + 'px';
 }
 function hideCtxMenu() { $('#ctx-menu').hidden = true; }
-window.addEventListener('mousedown', (e) => { if (!e.target.closest('#ctx-menu')) hideCtxMenu(); }, true);
+window.addEventListener('pointerdown', (e) => { if (!e.target.closest('#ctx-menu')) hideCtxMenu(); }, true);
 
 // ---------- keyboard ----------
 function initKeyboard() {
   window.addEventListener('keydown', (e) => {
     if (e.target.matches('input, textarea, select, [contenteditable="true"]')) return;
-    if (e.code === 'Space') { spaceHeld = true; return; }
+    if (e.code === 'Space') {
+      if (!spaceHeld) { spaceHeld = true; canvasEl().classList.add('hand'); }
+      e.preventDefault();
+      return;
+    }
     const k = e.key.toLowerCase();
-    const toolKeys = { v: 'select', n: 'note', l: 'link', t: 'todo', w: 'wall', f: 'folder',
+    if (k === 'escape') { setTool('select'); setSelection([]); hideCtxMenu(); closeModal(); closeDrawer(); return; }
+    if (!$('#modal-backdrop').hidden) return; // don't arm tools behind an open modal
+    const toolKeys = { v: 'select', h: 'hand', n: 'note', l: 'link', t: 'todo', w: 'wall', f: 'folder',
       c: 'comment', g: 'aiimage', s: 'sketch', a: 'connect' };
     if (!e.metaKey && !e.ctrlKey && toolKeys[k]) { setTool(toolKeys[k]); return; }
     if (!e.metaKey && !e.ctrlKey && k === 'i') { eyeDropper(); return; }
-    if (k === 'escape') { setTool('select'); setSelection([]); hideCtxMenu(); closeModal(); closeDrawer(); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selection.size) { deleteItems([...selection]); return; }
     if ((e.metaKey || e.ctrlKey) && k === 'd') { e.preventDefault(); duplicateItems([...selection]); return; }
     if ((e.metaKey || e.ctrlKey) && k === '0') { e.preventDefault(); zoomToFit(); return; }
+    if ((e.metaKey || e.ctrlKey) && (k === '=' || k === '+')) { e.preventDefault(); zoomBy(1.25); return; }
+    if ((e.metaKey || e.ctrlKey) && k === '-') { e.preventDefault(); zoomBy(1 / 1.25); return; }
     if ((e.metaKey || e.ctrlKey) && k === 'a') { e.preventDefault(); setSelection(board().items.map(i => i.id)); return; }
   });
-  window.addEventListener('keyup', (e) => { if (e.code === 'Space') spaceHeld = false; });
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') { spaceHeld = false; if (activeTool !== 'hand') canvasEl().classList.remove('hand'); }
+  });
 
   // paste: text → note, image → image card
   window.addEventListener('paste', async (e) => {
@@ -811,7 +922,7 @@ function initKeyboard() {
 }
 
 async function eyeDropper() {
-  if (!window.EyeDropper) { toast('EyeDropper not available', true); return; }
+  if (!window.EyeDropper) { toast('Eye dropper needs a Chromium-based browser', true); return; }
   try {
     const { sRGBHex } = await new window.EyeDropper().open();
     if (selection.size) {
@@ -840,7 +951,8 @@ function handleCreateTool(tool, w) {
     });
     return;
   }
-  createItem(tool, w.x, w.y);
+  const it = createItem(tool, w.x, w.y);
+  if (tool === 'note') startNoteEdit(it);
 }
 
 async function createLinkCard(url, x, y) {
@@ -878,7 +990,12 @@ async function exportRegionPNG(bb, name) {
     width: bb.w * scale + pad * 2,
     height: bb.h * scale + pad * 2
   };
-  const ok = await window.api.exportPNG(rect, name);
-  view = old; applyView();
-  if (ok) toast('PNG exported');
+  try {
+    const ok = await window.api.exportPNG(rect, name);
+    if (ok) toast('PNG exported');
+  } catch (err) {
+    toast('Export failed: ' + err.message, true);
+  } finally {
+    view = old; applyView();
+  }
 }

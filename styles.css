@@ -29,6 +29,8 @@ input, textarea, select {
 input:focus, textarea:focus { border-color: var(--accent); }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+svg.ic { flex: none; vertical-align: -2px; }
+button svg.ic { pointer-events: none; }
 
 /* ============ Layout ============ */
 #topbar {
@@ -46,7 +48,11 @@ input:focus, textarea:focus { border-color: var(--accent); }
 #breadcrumb .crumb:hover { color: var(--text); }
 .tb-btn {
   padding: 6px 13px; border-radius: 9px; color: var(--muted); font-weight: 500;
+  display: inline-flex; align-items: center; gap: 6px;
 }
+.tb-btn.icon-only { padding: 6px 8px; }
+#app-title { display: inline-flex; align-items: center; gap: 6px; }
+#app-title .spark { color: var(--accent); display: inline-flex; }
 .tb-btn:hover { color: var(--text); background: var(--panel2); }
 .icon-btn { color: var(--muted); padding: 2px 7px; border-radius: 6px; }
 .icon-btn:hover { color: var(--text); background: var(--panel2); }
@@ -71,9 +77,10 @@ input:focus, textarea:focus { border-color: var(--accent); }
   border-radius: 16px; padding: 7px; box-shadow: 0 8px 28px rgba(0,0,0,.45);
 }
 .tool {
-  width: 38px; height: 38px; border-radius: 11px; font-size: 16px;
+  width: 38px; height: 38px; border-radius: 11px;
   display: flex; align-items: center; justify-content: center; color: var(--muted);
 }
+#toolbar hr { border: none; border-top: 1px solid var(--border); margin: 4px 6px; }
 .tool:hover { background: var(--panel2); color: var(--text); }
 .tool.active { background: var(--accent); color: #fff; }
 
@@ -81,14 +88,16 @@ input:focus, textarea:focus { border-color: var(--accent); }
 #canvas {
   position: fixed; inset: 84px 0 78px 0; overflow: hidden;
   background: radial-gradient(circle, #232328 1px, transparent 1px) 0 0 / 28px 28px, var(--bg);
-  cursor: grab;
+  cursor: default; touch-action: none;
 }
 #canvas.tool-active { cursor: crosshair; }
-#canvas.panning { cursor: grabbing; }
+#canvas.hand { cursor: grab; }
+#canvas.panning { cursor: grabbing !important; }
 #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 #edges { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
 #edges path.edge { stroke: #86868f; stroke-width: 2; fill: none; cursor: pointer; }
 #edges path.edge:hover, #edges path.edge.selected { stroke: var(--accent); }
+#edges path.edge.preview { stroke: var(--accent2); stroke-dasharray: 6 5; pointer-events: none; }
 #edges path.sketch { fill: none; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; }
 #edges path.sketch.selected { filter: drop-shadow(0 0 4px var(--accent)); }
 #items { position: absolute; left: 0; top: 0; }
@@ -108,7 +117,7 @@ input:focus, textarea:focus { border-color: var(--accent); }
 }
 .card-head .ttl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-head .type-ico {
-  flex: none; width: 22px; height: 22px; border-radius: 6px; font-size: 12px;
+  flex: none; width: 22px; height: 22px; border-radius: 6px; color: var(--text);
   display: flex; align-items: center; justify-content: center;
   background: color-mix(in srgb, var(--card-color, #5b7cfa) 26%, transparent);
 }
@@ -128,12 +137,16 @@ input:focus, textarea:focus { border-color: var(--accent); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none;
 }
 
-/* walls: quiet section panels with underlined title, like the reference */
+/* walls: quiet section panels with underlined title, like the reference.
+   The wall body is transparent to the pointer — only its header and resize
+   handle are interactive, so selecting/panning INSIDE a wall still works. */
 .card[data-type="wall"] {
   background: color-mix(in srgb, var(--card-color, #3d4451) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--card-color, #3d4451) 55%, transparent);
   box-shadow: none; overflow: visible; border-radius: 18px;
+  pointer-events: none;
 }
+.card[data-type="wall"] .card-head, .card[data-type="wall"] .resize-handle { pointer-events: auto; }
 .card[data-type="wall"] .card-head {
   font-size: 14.5px; padding: 12px 16px 9px; display: block;
 }
@@ -192,11 +205,18 @@ input:focus, textarea:focus { border-color: var(--accent); }
 }
 #align-bar button { width: 30px; height: 28px; border-radius: 7px; color: var(--muted); }
 #align-bar button:hover { background: var(--panel2); color: var(--text); }
-#zoom-indicator {
-  position: absolute; right: 14px; bottom: 14px; color: var(--muted);
-  background: var(--panel); padding: 3px 10px; border-radius: 8px;
-  border: 1px solid var(--border); font-size: 11px; z-index: 45;
+#zoom-controls {
+  position: absolute; right: 14px; bottom: 14px; z-index: 45;
+  display: flex; align-items: center; gap: 2px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 3px; box-shadow: 0 6px 18px rgba(0,0,0,.4);
 }
+#zoom-controls button {
+  min-width: 28px; height: 26px; border-radius: 7px; color: var(--muted);
+  display: flex; align-items: center; justify-content: center; font-size: 11px;
+}
+#zoom-controls button:hover { background: var(--panel2); color: var(--text); }
+#zoom-pct { padding: 0 6px; }
 
 /* ============ AI bar — floating pill ============ */
 #ai-bar {
@@ -212,7 +232,8 @@ input:focus, textarea:focus { border-color: var(--accent); }
   position: relative;
 }
 #ai-input-row:focus-within { border-color: var(--accent); }
-#ai-spark { color: var(--accent); font-size: 16px; flex: none; }
+#ai-spark { color: var(--accent); flex: none; display: flex; }
+#ai-spark svg.ic { width: 18px; height: 18px; }
 #ai-input {
   flex: 1; resize: none; max-height: 120px; background: none; border: none; padding: 4px 2px;
   font-size: 13.5px;
@@ -221,10 +242,10 @@ input:focus, textarea:focus { border-color: var(--accent); }
 #ai-kbd kbd { font-size: 11px; padding: 2px 7px; }
 #ai-send {
   background: var(--accent); color: #fff; width: 34px; height: 34px; border-radius: 50%;
-  font-weight: 700; flex: none; display: flex; align-items: center; justify-content: center;
+  flex: none; display: flex; align-items: center; justify-content: center;
 }
 #ai-send:disabled { opacity: .5; cursor: default; }
-#ai-toggle-log { color: var(--muted); flex: none; font-size: 15px; }
+#ai-toggle-log { color: var(--muted); flex: none; display: flex; align-items: center; padding: 4px; }
 #ai-toggle-log:hover { color: var(--text); }
 #ai-style {
   color: var(--muted); flex: none; background: none; border: none; font-size: 12px;
@@ -278,7 +299,8 @@ input:focus, textarea:focus { border-color: var(--accent); }
 }
 .lib-item:hover { border-color: var(--border2); background: var(--panel2); }
 .lib-item .tile-thumb {
-  height: 76px; display: flex; align-items: center; justify-content: center; font-size: 26px;
+  height: 76px; display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,.75);
   background: linear-gradient(135deg, #2b3350, #22263a);
 }
 .lib-item[data-cat="Filmmaking"] .tile-thumb { background: linear-gradient(135deg, #3a2f4d, #241f33); }
@@ -356,7 +378,8 @@ input:focus, textarea:focus { border-color: var(--accent); }
   position: fixed; z-index: 120; background: var(--panel); border: 1px solid var(--border2);
   border-radius: 12px; padding: 5px; min-width: 200px; box-shadow: 0 12px 36px rgba(0,0,0,.55);
 }
-#ctx-menu .ci { padding: 7px 12px; border-radius: 8px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+#ctx-menu .ci { padding: 7px 12px; border-radius: 8px; cursor: pointer; display: flex; gap: 9px; align-items: center; }
+#ctx-menu .ci svg.ic { color: var(--muted); }
 #ctx-menu .ci:hover { background: var(--panel2); }
 #ctx-menu .ci.danger { color: var(--danger); }
 #ctx-menu hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }

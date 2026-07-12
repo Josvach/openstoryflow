@@ -38,6 +38,7 @@ async function boot() {
   cur.projectId = DB.projects[0].id;
   cur.boardId = firstBoardOf(cur.projectId);
   cur.path = [];
+  hydrateIcons(document);
   initCanvasEvents();
   initKeyboard();
   initTopbar();
@@ -46,6 +47,14 @@ async function boot() {
   renderAll();
   zoomToFit();
   if (!DB.settings.onboarded) { showHelp(true); DB.settings.onboarded = true; save(); }
+}
+
+// inject SVGs into every element carrying data-icon
+function hydrateIcons(root) {
+  root.querySelectorAll('[data-icon]').forEach(el => {
+    const size = el.classList.contains('tool') ? 17 : 14;
+    el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, size));
+  });
 }
 
 function firstBoardOf(projectId) {
@@ -70,7 +79,6 @@ function initTopbar() {
     renderAll(); zoomToFit();
   };
   $('#btn-new-project').onclick = newProject;
-  $('#btn-fit').onclick = zoomToFit;
   $('#btn-tactics').onclick = () => openDrawer('tactics');
   $('#btn-templates').onclick = () => openDrawer('templates');
   $('#btn-docs').onclick = () => openDrawer('docs');
@@ -216,10 +224,11 @@ function allTactics() {
   return [...TACTICS, ...DB.customTactics];
 }
 
-const CAT_EMOJI = {
-  'Filmmaking': '🎬', 'Content Creation': '📣', 'Business': '📈', 'Personal': '🌱',
-  'Writing': '✍️', 'Your Tactics': '⭐',
-  'Productivity': '✅', 'Thinking': '🧠', 'Film': '🎬', 'Design': '🎨', 'AI': '✨'
+const CAT_ICON = {
+  'Filmmaking': 'clapperboard', 'Content Creation': 'megaphone', 'Business': 'trending-up',
+  'Personal': 'sprout', 'Writing': 'pen-tool', 'Your Tactics': 'star',
+  'Productivity': 'list-checks', 'Thinking': 'brain', 'Film': 'clapperboard',
+  'Design': 'palette', 'AI': 'sparkles'
 };
 
 function renderTacticsDrawer(body) {
@@ -248,7 +257,7 @@ function renderTacticsDrawer(body) {
       const el = document.createElement('div');
       el.className = 'lib-item';
       el.dataset.cat = t.category;
-      el.innerHTML = `<div class="tile-thumb">${CAT_EMOJI[t.category] || '📚'}</div><div class="tile-body">
+      el.innerHTML = `<div class="tile-thumb">${icon(CAT_ICON[t.category] || 'book-open', 26)}</div><div class="tile-body">
         <div class="li-name">${esc(t.name)}</div><div class="li-desc">${esc(t.desc || '')}</div>
         <div class="li-meta">${esc(t.category)} · ${t.cards.length} smart cards</div></div>`;
       el.onclick = () => previewTactic(t);
@@ -307,7 +316,7 @@ function addTacticToCanvas(t) {
   save(); renderBoard();
   setSelection(ids);
   zoomToFit();
-  toast(`"${t.name}" added — every card has its own AI assistant (✨)`);
+  toast(`"${t.name}" added — every card has its own AI assistant`);
 }
 
 function saveSelectionAsTactic() {
@@ -339,7 +348,7 @@ function renderTemplatesDrawer(body) {
       const el = document.createElement('div');
       el.className = 'lib-item';
       el.dataset.cat = t.category;
-      el.innerHTML = `<div class="tile-thumb">${CAT_EMOJI[t.category] || '🗂'}</div><div class="tile-body">
+      el.innerHTML = `<div class="tile-thumb">${icon(CAT_ICON[t.category] || 'layout-template', 26)}</div><div class="tile-body">
         <div class="li-name">${esc(t.name)}</div><div class="li-desc">${esc(t.desc)}</div>
         <div class="li-meta">${esc(t.category)}</div></div>`;
       el.onclick = () => { insertTemplate(t); closeDrawer(); };
@@ -385,9 +394,9 @@ function renderDocsDrawer(body) {
   for (const d of project().docs) {
     const el = document.createElement('div');
     el.className = 'lib-item row doc-item';
-    el.innerHTML = `<div class="li-name">📄 ${esc(d.name)}</div>`;
+    el.innerHTML = `<div class="li-name">${icon('file-text', 14)} ${esc(d.name)}</div>`;
     const delBtn = document.createElement('button');
-    delBtn.className = 'icon-btn'; delBtn.textContent = '🗑';
+    delBtn.className = 'icon-btn'; delBtn.innerHTML = icon('trash-2', 14);
     delBtn.onclick = (e) => {
       e.stopPropagation();
       if (confirm(`Delete doc "${d.name}"?`)) { project().docs = project().docs.filter(x => x !== d); save(); openDrawer('docs'); }
@@ -414,7 +423,7 @@ function openDocEditor(d) {
       <button id="doc-export-pdf" style="margin-left:auto">Export PDF</button>
     </div>
     <div id="doc-editor" contenteditable="true"></div>`;
-  openModal('📄 ' + d.name, wrap, true);
+  openModal(d.name, wrap, true);
   const ed = wrap.querySelector('#doc-editor');
   ed.innerHTML = d.html || '';
   ed.focus();
@@ -444,21 +453,21 @@ function showExportMenu() {
     el.onclick = () => { closeModal(); fn(); };
     wrap.appendChild(el);
   };
-  mk('🖼 Board → PNG', 'Export the whole current board as a high-quality image.', async () => {
+  mk(icon('image',14) + ' Board → PNG', 'Export the whole current board as a high-quality image.', async () => {
     const bb = boardBBox();
     if (!bb) { toast('Board is empty', true); return; }
     await exportRegionPNG(bb, board().name || 'board');
   });
-  mk('🖼 Selection → PNG', 'Export just the selected cards.', exportSelectionPNG);
-  mk('📑 Board → PDF summary', 'A clean text summary of all cards, ideal for stakeholders.', exportBoardPDF);
-  mk('💾 Project → JSON', 'Full project backup (boards, docs, everything). Re-importable.', () => {
+  mk(icon('image',14) + ' Selection → PNG', 'Export just the selected cards.', exportSelectionPNG);
+  mk(icon('file-down',14) + ' Board → PDF summary', 'A clean text summary of all cards, ideal for stakeholders.', exportBoardPDF);
+  mk(icon('download',14) + ' Project → JSON', 'Full project backup (boards, docs, everything). Re-importable.', () => {
     const boards = {};
     for (const [id, b] of Object.entries(DB.boards)) if (b.projectId === cur.projectId) boards[id] = b;
     const data = { openstoryflowProject: 1, project: project(), boards };
     window.api.exportText(JSON.stringify(data, null, 2), project().name.replace(/\s+/g, '-') + '.json', 'json')
       .then(ok => ok && toast('Project exported'));
   });
-  mk('📥 Import project JSON', 'Load a previously exported project into this workspace.', async () => {
+  mk(icon('upload',14) + ' Import project JSON', 'Load a previously exported project into this workspace.', async () => {
     const data = await window.api.importJSON();
     if (!data?.openstoryflowProject) { toast('Not a valid OpenStoryflow export', true); return; }
     data.project.id = uid();
@@ -540,11 +549,12 @@ function showHelp(firstRun) {
     </ul>
     <p style="margin:10px 0 4px"><b>Canvas</b></p>
     <ul class="tips-list">
-      <li>Drag empty space to <b>pan</b> · scroll/pinch to <b>zoom</b> · <kbd>⌘0</kbd> zoom to fit · double-click empty space fits too</li>
-      <li><kbd>Shift</kbd>+drag = rubber-band select · <kbd>Shift</kbd>+click = multi-select · <kbd>⌥</kbd>+drag a card = duplicate</li>
-      <li>Tools: <kbd>N</kbd> note · <kbd>L</kbd> link · <kbd>T</kbd> to-do · <kbd>W</kbd> wall · <kbd>F</kbd> folder (nested canvas — double-click to enter) · <kbd>C</kbd> comment · <kbd>G</kbd> AI image · <kbd>S</kbd> sketch · <kbd>A</kbd> connect arrow · <kbd>I</kbd> eye dropper</li>
+      <li><b>Scroll</b> (two fingers) moves around · <b>pinch</b> or <kbd>⌘</kbd>+scroll zooms · <kbd>⌘0</kbd> zoom to fit · <kbd>⌘+</kbd>/<kbd>⌘−</kbd> zoom steps</li>
+      <li><b>Drag empty canvas</b> = select more cards · hold <kbd>Space</kbd> (or <kbd>H</kbd>) and drag = pan · <kbd>Shift</kbd>+click = multi-select · <kbd>⌥</kbd>+drag a card = duplicate</li>
+      <li><b>Double-click empty canvas</b> = new note right there · double-click a card = edit it · double-click a folder = enter its nested canvas</li>
+      <li>Tools: <kbd>N</kbd> note · <kbd>L</kbd> link · <kbd>T</kbd> to-do · <kbd>W</kbd> wall · <kbd>F</kbd> folder · <kbd>C</kbd> comment · <kbd>G</kbd> AI image · <kbd>S</kbd> sketch · <kbd>A</kbd> connect arrow · <kbd>I</kbd> eye dropper</li>
       <li>Right-click a card for colors, rename, connect, comment, AI, save-selection-as-Tactic</li>
-      <li>Drag & drop any file straight onto the canvas — images, PDF, video (with 📸 frame capture), audio</li>
+      <li>Drag & drop any file straight onto the canvas — images, PDF, video (with frame capture), audio</li>
       <li>Select 2+ cards to get the alignment bar (row / column / grid / distribute)</li>
     </ul>
     <p style="margin:10px 0 4px"><b>AI setup</b></p>
@@ -765,7 +775,7 @@ async function sendBoardChat() {
     renderChatLog();
   } finally {
     send.disabled = false;
-    send.textContent = '➤';
+    send.innerHTML = icon('send-horizontal', 14);
   }
 }
 
@@ -835,7 +845,7 @@ function openCardAI(itemId) {
       <button class="btn-secondary" id="cai-append">Append to card</button>
       <button class="btn-primary" id="cai-replace">Replace card content</button>
     </div>`;
-  openModal(`✨ AI — ${it.title || it.type}`, wrap);
+  openModal(`AI — ${it.title || it.type}`, wrap);
 
   const log = wrap.querySelector('#cai-log');
   const applyRow = wrap.querySelector('#cai-apply-row');
@@ -915,7 +925,7 @@ async function generateImageCard(prompt, x, y) {
     it.pending = false;
     bumpUsage('images');
     save(); renderBoard();
-    toast('Image ready ✨');
+    toast('Image ready');
   } catch (err) {
     it.pending = false;
     it.title = '⚠️ generation failed';
