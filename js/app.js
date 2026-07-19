@@ -65,6 +65,8 @@ function renderAll() {
   renderProjectSelect();
   renderBoardTabs();
   renderBreadcrumb();
+  const bn = $('#board-name');
+  if (bn) bn.textContent = board()?.name || '';
   renderBoard();
   renderChatLog();
 }
@@ -85,6 +87,42 @@ function initTopbar() {
   $('#btn-export').onclick = showExportMenu;
   $('#btn-settings').onclick = showSettings;
   $('#btn-help').onclick = () => showHelp(false);
+  $('#btn-present').onclick = enterPresent;
+  $('#btn-share').onclick = showShare;
+  $('#present-exit').onclick = exitPresent;
+  $('#btn-toggle-panels').onclick = () => document.body.classList.toggle('panels-hidden');
+  $('#board-name').onclick = () => {
+    const b = board();
+    promptModal('Rename board', 'Board name', b.name, (v) => { if (v?.trim()) { b.name = v.trim(); save(); renderAll(); } });
+  };
+}
+
+function enterPresent() {
+  document.body.classList.add('present');
+  closeDrawer(); closeModal();
+  setTimeout(zoomToFit, 30);
+}
+function exitPresent() { document.body.classList.remove('present'); setTimeout(zoomToFit, 30); }
+
+// Local app: "Share" = copy a self-contained snapshot / export, no server.
+function showShare() {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `<p style="color:var(--muted);margin-bottom:12px">OpenStoryflow runs entirely in your browser — there's no server to host a live link. Share a board by exporting it:</p>`;
+  const mk = (ic, label, desc, fn) => {
+    const el = document.createElement('div');
+    el.className = 'lib-item'; el.style.marginBottom = '8px';
+    el.innerHTML = `<div class="tile-body"><div class="li-name">${icon(ic, 14)} ${label}</div><div class="li-desc">${desc}</div></div>`;
+    el.onclick = () => { closeModal(); fn(); };
+    wrap.appendChild(el);
+  };
+  mk('image', 'Board → PNG image', 'A picture of the whole board to send anywhere.', async () => {
+    const bb = boardBBox(); if (!bb) { toast('Board is empty', true); return; }
+    await exportRegionPNG(bb, board().name || 'board');
+  });
+  mk('file-down', 'Board → PDF summary', 'A clean text summary for stakeholders.', exportBoardPDF);
+  mk('download', 'Project → JSON', 'A file another OpenStoryflow can import (boards, docs, images).', exportProjectJSON);
+  mk('monitor-play', 'Present mode', 'Full-screen, read-only view for showing it live.', () => { closeModal(); enterPresent(); });
+  openModal('Share this board', wrap);
 }
 
 function newProject() {
@@ -165,9 +203,42 @@ function renderBreadcrumb() {
 
 function initToolbar() {
   document.querySelectorAll('#toolbar .tool[data-tool]').forEach(b => {
-    b.onclick = () => setTool(b.dataset.tool);
+    b.onclick = () => { setTool(b.dataset.tool); closeAllTools(); };
   });
-  $('#btn-eyedropper').onclick = eyeDropper;
+  $('#btn-eyedropper').onclick = () => { eyeDropper(); closeAllTools(); };
+
+  // All Tools popover
+  $('#rail-alltools').onclick = (e) => {
+    e.stopPropagation();
+    const pop = $('#alltools-pop');
+    pop.hidden = !pop.hidden;
+    $('#rail-alltools').classList.toggle('active', !pop.hidden);
+  };
+  window.addEventListener('pointerdown', (e) => {
+    if (!e.target.closest('#alltools-pop') && !e.target.closest('#rail-alltools')) closeAllTools();
+  });
+
+  // rail shortcuts to drawers / uploads
+  $('#rail-tactics').onclick = () => openDrawer('tactics');
+  $('#rail-upload').onclick = () => pickAndDropFiles('');
+  $('#rail-images').onclick = () => pickAndDropFiles('image/*');
+}
+
+function closeAllTools() {
+  const pop = $('#alltools-pop');
+  if (pop) { pop.hidden = true; $('#rail-alltools').classList.remove('active'); }
+}
+
+// open the OS file picker and drop chosen files onto the viewport centre
+function pickAndDropFiles(accept) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.multiple = true; if (accept) inp.accept = accept;
+  inp.onchange = async () => {
+    const c = viewportCenterWorld();
+    let off = 0;
+    for (const f of inp.files) { await addDroppedFile(f, c.x + off, c.y + off); off += 30; }
+  };
+  inp.click();
 }
 
 // ---------------- toast / modal helpers ----------------
@@ -337,6 +408,21 @@ function saveSelectionAsTactic() {
 }
 
 // ----- Templates -----
+// render a schematic mini-board (scaled rects) of a template's layout
+function boardMiniHTML(items, height = 82) {
+  const specs = items.map(i => ({ type: i.type, x: i.x, y: i.y, w: i.w || 220, h: i.h || 120 }));
+  const bb = boardBBox(specs);
+  if (!bb) return `<div class="board-mini" style="height:${height}px"></div>`;
+  const pad = 8;
+  const s = Math.min((260 - pad * 2) / bb.w, (height - pad * 2) / bb.h);
+  const ox = pad + ((260 - pad * 2) - bb.w * s) / 2;
+  const oy = pad + ((height - pad * 2) - bb.h * s) / 2;
+  const rects = specs.sort((a, z) => (a.type === 'wall' ? -1 : 0) - (z.type === 'wall' ? -1 : 0)).map(i =>
+    `<i class="${i.type === 'wall' ? 'w' : 'c'}" style="left:${(ox + (i.x - bb.x) * s).toFixed(1)}px;top:${(oy + (i.y - bb.y) * s).toFixed(1)}px;width:${Math.max(3, i.w * s).toFixed(1)}px;height:${Math.max(3, i.h * s).toFixed(1)}px"></i>`
+  ).join('');
+  return `<div class="board-mini" style="height:${height}px">${rects}</div>`;
+}
+
 function renderTemplatesDrawer(body) {
   const search = document.createElement('input');
   search.className = 'drawer-search'; search.placeholder = 'Search templates…';
@@ -349,16 +435,33 @@ function renderTemplatesDrawer(body) {
       const el = document.createElement('div');
       el.className = 'lib-item';
       el.dataset.cat = t.category;
-      el.innerHTML = `<div class="tile-thumb">${icon(CAT_ICON[t.category] || 'layout-template', 26)}</div><div class="tile-body">
-        <div class="li-name">${esc(t.name)}</div><div class="li-desc">${esc(t.desc)}</div>
-        <div class="li-meta">${esc(t.category)}</div></div>`;
-      el.onclick = () => { insertTemplate(t); closeDrawer(); };
+      el.innerHTML = `${boardMiniHTML(t.items)}<div class="tile-body">
+        <div class="li-name">${esc(t.name)}</div>
+        <div class="li-meta">${esc(t.category)} · Free</div></div>`;
+      el.onclick = () => previewTemplate(t);
       list.appendChild(el);
     }
   };
   search.oninput = refresh;
   body.append(search, list);
   refresh();
+}
+
+function previewTemplate(t) {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    ${boardMiniHTML(t.items, 260)}
+    <div style="text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--accent2);margin-top:14px">${esc(t.category)}</div>
+    <div style="font-size:19px;font-weight:700;margin:2px 0 4px">${esc(t.name)}</div>
+    <div style="color:var(--muted);margin-bottom:8px">${esc(t.desc)}</div>
+    <div style="color:var(--muted);font-size:12px">Official template · Free · fully editable once added</div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="tpl-cancel">Cancel</button>
+      <button class="btn-primary" id="tpl-use">Use this template</button>
+    </div>`;
+  openModal(t.name, wrap);
+  wrap.querySelector('#tpl-cancel').onclick = closeModal;
+  wrap.querySelector('#tpl-use').onclick = () => { insertTemplate(t); closeModal(); closeDrawer(); };
 }
 
 function insertTemplate(t) {
@@ -448,6 +551,14 @@ function openDocEditor(d) {
 }
 
 // ---------------- export menu ----------------
+function exportProjectJSON() {
+  const boards = {};
+  for (const [id, b] of Object.entries(DB.boards)) if (b.projectId === cur.projectId) boards[id] = b;
+  const data = { openstoryflowProject: 1, project: project(), boards };
+  window.api.exportText(JSON.stringify(data, null, 2), project().name.replace(/\s+/g, '-') + '.json', 'json')
+    .then(ok => ok && toast('Project exported'));
+}
+
 function showExportMenu() {
   const wrap = document.createElement('div');
   const mk = (label, desc, fn) => {
@@ -465,13 +576,7 @@ function showExportMenu() {
   });
   mk(icon('image',14) + ' Selection → PNG', 'Export just the selected cards.', exportSelectionPNG);
   mk(icon('file-down',14) + ' Board → PDF summary', 'A clean text summary of all cards, ideal for stakeholders.', exportBoardPDF);
-  mk(icon('download',14) + ' Project → JSON', 'Full project backup (boards, docs, everything). Re-importable.', () => {
-    const boards = {};
-    for (const [id, b] of Object.entries(DB.boards)) if (b.projectId === cur.projectId) boards[id] = b;
-    const data = { openstoryflowProject: 1, project: project(), boards };
-    window.api.exportText(JSON.stringify(data, null, 2), project().name.replace(/\s+/g, '-') + '.json', 'json')
-      .then(ok => ok && toast('Project exported'));
-  });
+  mk(icon('download',14) + ' Project → JSON', 'Full project backup (boards, docs, everything). Re-importable.', exportProjectJSON);
   mk(icon('upload',14) + ' Import project JSON', 'Load a previously exported project into this workspace.', async () => {
     const data = await window.api.importJSON();
     if (!data?.openstoryflowProject) { toast('Not a valid OpenStoryflow export', true); return; }
@@ -548,7 +653,7 @@ function showHelp(firstRun) {
   openModal(firstRun ? 'Welcome to OpenStoryflow 👋' : 'Help & shortcuts', `
     ${firstRun ? '<p style="margin-bottom:10px">Your local infinite canvas for creative planning. Three ways to start:</p>' : ''}
     <ul class="tips-list">
-      <li>💬 <b>Type into the AI chat at the bottom</b> — describe your idea and the AI builds the whole board (cards, sections, columns). Type <kbd>@</kbd> to mention a Tactic, Doc or card as extra context.</li>
+      <li>💬 <b>Type into the AI chat at the bottom</b> — describe your idea and the AI builds the whole board (cards, sections, columns). Pick an <b>output structure</b> (Auto / Kanban / Moodboard / Mind Map / Tasks / Planner) from the button left of the input. Type <kbd>@</kbd> to mention a Tactic, Doc or card as extra context.</li>
       <li>📚 <b>Tactics</b> — expert blueprints (Hero's Journey, AIDA, StoryBrand…). Every tactic card has its own ✨ AI assistant that knows the card's purpose.</li>
       <li>🗂 <b>Templates</b> — pre-arranged boards (Kanban, Storyboard, Moodboard…), fully editable.</li>
     </ul>
@@ -625,6 +730,16 @@ function serializeBoard(b) {
 // ---------------- board-level AI chat ----------------
 let pendingMentions = []; // {kind:'tactic'|'doc'|'card', name, ref}
 
+// output structures the user can ask the AI to build the board into
+const AI_OUTPUTS = [
+  { id: 'auto', label: 'Auto', ico: 'wand-2', sub: 'AI picks the best structure', hint: '' },
+  { id: 'kanban', label: 'Kanban', ico: 'columns-3', sub: 'Columns of task cards', hint: 'Structure the result as a KANBAN BOARD: create wall "columns" side by side (left→right) and place note/todo cards inside each column.' },
+  { id: 'moodboard', label: 'Moodboard', ico: 'grid-3x3', sub: 'Grid of visual references', hint: 'Structure the result as a MOODBOARD: a tight grid of cards (image placeholders / short descriptive notes) packed together.' },
+  { id: 'mindmap', label: 'Mind Map', ico: 'network', sub: 'Central idea with branches', hint: 'Structure the result as a MIND MAP: one central node card in the middle and related cards radiating around it, connected with connect actions from the centre to each branch.' },
+  { id: 'tasks', label: 'Tasks', ico: 'list-todo', sub: 'A checklist of to-dos', hint: 'Structure the result as TASKS: use todo cards with checklist items.' },
+  { id: 'planner', label: 'Planner', ico: 'calendar-days', sub: 'Week / timeline columns', hint: 'Structure the result as a PLANNER: wall columns for each day/week/phase left→right with cards under each.' }
+];
+
 function initAIBar() {
   const input = $('#ai-input');
   const send = $('#ai-send');
@@ -632,6 +747,9 @@ function initAIBar() {
   $('#ai-style').onchange = (e) => { DB.settings.style = e.target.value; save(); };
   $('#ai-toggle-log').onclick = () => { const l = $('#ai-log'); l.hidden = !l.hidden; if (!l.hidden) renderChatLog(); };
   send.onclick = sendBoardChat;
+  $('#ai-fab').onclick = () => toggleOutputMenu();
+  $('#ai-output').onclick = () => toggleOutputMenu();
+  setOutput(DB.settings.output || 'auto');
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && $('#mention-menu').hidden) { e.preventDefault(); sendBoardChat(); }
     if (e.key === 'Escape') $('#mention-menu').hidden = true;
@@ -649,6 +767,36 @@ function initAIBar() {
       input.focus();
     }
   });
+  window.addEventListener('pointerdown', (e) => {
+    if (!e.target.closest('#ai-output-menu') && !e.target.closest('#ai-output') && !e.target.closest('#ai-fab'))
+      $('#ai-output-menu').hidden = true;
+  });
+}
+
+function setOutput(id) {
+  DB.settings.output = id;
+  const o = AI_OUTPUTS.find(x => x.id === id) || AI_OUTPUTS[0];
+  $('#ai-output-label').textContent = o.label;
+  $('#ai-output-ico').innerHTML = icon(o.ico, 14);
+  save();
+}
+
+function toggleOutputMenu() {
+  const menu = $('#ai-output-menu');
+  if (!menu.hidden) { menu.hidden = true; return; }
+  menu.innerHTML = '';
+  for (const o of AI_OUTPUTS) {
+    const el = document.createElement('div');
+    el.className = 'ao' + (o.id === (DB.settings.output || 'auto') ? ' active' : '');
+    el.innerHTML = `<span class="ao-ico">${icon(o.ico, 17)}</span><span><b>${o.label}</b><div class="ao-sub">${o.sub}</div></span>`;
+    el.onclick = () => { setOutput(o.id); menu.hidden = true; };
+    menu.appendChild(el);
+  }
+  menu.hidden = false;
+  // position above the output button
+  const b = $('#ai-output').getBoundingClientRect();
+  menu.style.left = Math.round(b.left) + 'px';
+  menu.style.top = Math.round(b.top - menu.offsetHeight - 8) + 'px';
 }
 
 function showMentionMenu(query) {
@@ -755,8 +903,10 @@ async function sendBoardChat() {
 
   const c = viewportCenterWorld();
   const history = p.chat.slice(-12, -1).map(m => `${m.role}: ${m.text}`).join('\n');
+  const outHint = (AI_OUTPUTS.find(o => o.id === (DB.settings.output || 'auto')) || {}).hint;
   const prompt =
     `RESPONSE STYLE: ${STYLE_HINTS[DB.settings.style || 'default']}\n` +
+    (outHint ? `REQUESTED OUTPUT STRUCTURE: ${outHint}\n` : '') +
     (p.memory ? `\nPROJECT MEMORY (persistent):\n${p.memory}\n` : '') +
     (history ? `\nRECENT CONVERSATION:\n${history}\n` : '') +
     `\nACTIVE BOARD JSON:\n${serializeBoard(board())}\n` +

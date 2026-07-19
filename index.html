@@ -12,40 +12,52 @@
 <!-- ===== Top bar ===== -->
 <header id="topbar">
   <div class="tb-left">
+    <button id="btn-toggle-panels" class="icon-btn" title="Hide/show panels" data-icon="panel-left"></button>
     <span id="app-title"><span class="spark" data-icon="sparkles"></span>OpenStoryflow</span>
+    <span class="tb-divider"></span>
     <select id="project-select" title="Project"></select>
     <button id="btn-new-project" class="icon-btn" title="New project" data-icon="plus"></button>
+    <span id="board-name" title="Rename board"></span>
     <span id="breadcrumb"></span>
   </div>
   <div class="tb-right">
     <button id="btn-tactics" class="tb-btn" data-icon="book-open">Tactics</button>
     <button id="btn-templates" class="tb-btn" data-icon="layout-template">Templates</button>
     <button id="btn-docs" class="tb-btn" data-icon="file-text">Docs</button>
-    <button id="btn-export" class="tb-btn" data-icon="download">Export</button>
     <button id="btn-help" class="tb-btn icon-only" title="Help & shortcuts" data-icon="circle-help"></button>
     <button id="btn-settings" class="tb-btn icon-only" title="Settings" data-icon="settings"></button>
+    <span class="tb-divider"></span>
+    <button id="btn-export" class="tb-btn icon-only" title="Export" data-icon="download"></button>
+    <button id="btn-present" class="tb-btn" data-icon="monitor-play">Present</button>
+    <button id="btn-share" class="tb-btn share" data-icon="share-2">Share</button>
   </div>
 </header>
 
 <!-- ===== Board tabs ===== -->
 <div id="board-tabs"></div>
 
-<!-- ===== Left toolbar ===== -->
+<!-- ===== Left rail ===== -->
 <nav id="toolbar">
-  <button data-tool="select" class="tool active" title="Select (V) — drag empty canvas to select" data-icon="mouse-pointer-2"></button>
-  <button data-tool="hand" class="tool" title="Hand / pan (H or hold Space)" data-icon="hand"></button>
+  <button data-tool="select" class="tool active" title="Select (V) — drag empty canvas to select" data-icon="mouse-pointer-2" data-label="Select"></button>
+  <button data-tool="hand" class="tool" title="Hand / pan (H or hold Space)" data-icon="hand" data-label="Hand"></button>
   <hr>
-  <button data-tool="note" class="tool" title="Note (N) — or double-click the canvas" data-icon="sticky-note"></button>
-  <button data-tool="link" class="tool" title="Link (L)" data-icon="link"></button>
-  <button data-tool="todo" class="tool" title="To-do (T)" data-icon="list-checks"></button>
-  <button data-tool="wall" class="tool" title="Wall / section (W)" data-icon="frame"></button>
-  <button data-tool="folder" class="tool" title="Folder — nested canvas (F)" data-icon="folder"></button>
-  <button data-tool="comment" class="tool" title="Comment (C)" data-icon="message-circle"></button>
-  <button data-tool="aiimage" class="tool" title="AI Image (G)" data-icon="sparkles"></button>
-  <button data-tool="sketch" class="tool" title="Sketch / pen (S)" data-icon="pen-line"></button>
-  <button data-tool="connect" class="tool" title="Connect cards with an arrow (A)" data-icon="arrow-up-right"></button>
-  <hr>
-  <button id="btn-eyedropper" class="tool" title="Eye dropper (I)" data-icon="pipette"></button>
+  <button data-tool="comment" class="tool" title="Comment (C)" data-icon="message-circle" data-label="Comment"></button>
+  <button data-tool="note" class="tool" title="Doc / note (N) — or double-click the canvas" data-icon="file-text" data-label="Doc"></button>
+  <button data-tool="aiimage" class="tool" title="AI Image (G)" data-icon="sparkles" data-label="AI Image"></button>
+  <button id="rail-alltools" class="tool" title="All tools" data-icon="layout-grid" data-label="All Tools"></button>
+  <button id="rail-tactics" class="tool" title="Tactics — expert blueprints" data-icon="book-open" data-label="Tactics"></button>
+  <button id="rail-upload" class="tool" title="Upload a file to the canvas" data-icon="upload" data-label="Upload"></button>
+  <button id="rail-images" class="tool" title="Add an image" data-icon="image" data-label="Images"></button>
+  <!-- All Tools popover -->
+  <div id="alltools-pop" hidden>
+    <button data-tool="todo" class="tool" title="To-do (T)" data-icon="list-checks" data-label="To-do"></button>
+    <button data-tool="wall" class="tool" title="Wall / section (W)" data-icon="frame" data-label="Wall"></button>
+    <button data-tool="folder" class="tool" title="Folder — nested canvas (F)" data-icon="folder" data-label="Folder"></button>
+    <button data-tool="link" class="tool" title="Link (L)" data-icon="link" data-label="Link"></button>
+    <button data-tool="sketch" class="tool" title="Sketch / pen (S)" data-icon="pen-line" data-label="Sketch"></button>
+    <button data-tool="connect" class="tool" title="Connect with an arrow (A)" data-icon="arrow-up-right" data-label="Connect"></button>
+    <button id="btn-eyedropper" class="tool" title="Eye dropper (I)" data-icon="pipette" data-label="Color"></button>
+  </div>
 </nav>
 
 <!-- ===== Canvas ===== -->
@@ -82,19 +94,23 @@
 <footer id="ai-bar">
   <div id="ai-log" hidden></div>
   <div id="mention-menu" hidden></div>
-  <div id="ai-input-row">
-    <span id="ai-spark" data-icon="sparkles"></span>
-    <textarea id="ai-input" rows="1" placeholder="Ask anything — AI builds and edits the board. Type @ to mention a Tactic, Doc or card…"></textarea>
-    <select id="ai-style" title="Response style">
-      <option value="default">Default</option>
-      <option value="creative">Creative</option>
-      <option value="concise">Concise</option>
-      <option value="detailed">Detailed</option>
-    </select>
-    <button id="ai-toggle-log" title="Show/hide conversation" data-icon="message-square-text"></button>
-    <span id="ai-kbd"><kbd>⌘</kbd><kbd>K</kbd></span>
-    <button id="ai-send" title="Send" data-icon="send-horizontal"></button>
+  <div id="ai-dock">
+    <button id="ai-fab" title="AI output type" data-icon="sparkles"></button>
+    <div id="ai-input-row">
+      <button id="ai-output" title="What should AI build?"><span id="ai-output-ico" data-icon="wand-2"></span><span id="ai-output-label">Auto</span><span data-icon="chevron-down"></span></button>
+      <textarea id="ai-input" rows="1" placeholder="Edit or add things to your board…"></textarea>
+      <select id="ai-style" title="Response style">
+        <option value="default">Default</option>
+        <option value="creative">Creative</option>
+        <option value="concise">Concise</option>
+        <option value="detailed">Detailed</option>
+      </select>
+      <button id="ai-toggle-log" title="Show/hide conversation" data-icon="message-square-text"></button>
+      <span id="ai-kbd"><kbd>⌘</kbd><kbd>K</kbd></span>
+      <button id="ai-send" title="Send" data-icon="send-horizontal"></button>
+    </div>
   </div>
+  <div id="ai-output-menu" hidden></div>
 </footer>
 
 <!-- ===== Side drawer (tactics / templates / docs) ===== -->
@@ -113,6 +129,10 @@
     <div id="modal-body"></div>
   </div>
 </div>
+
+<!-- ===== Present mode chrome ===== -->
+<button id="present-exit" data-icon="x">Exit present</button>
+<div id="present-badge"><span class="spark" data-icon="sparkles"></span> Made with OpenStoryflow</div>
 
 <!-- ===== Context menu ===== -->
 <div id="ctx-menu" hidden></div>

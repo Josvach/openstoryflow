@@ -67,9 +67,9 @@ function renderBoard() {
 
 function itemIconName(t) {
   return {
-    note: 'sticky-note', link: 'link', todo: 'list-checks', wall: 'frame', folder: 'folder',
+    note: 'file-text', link: 'link', todo: 'list-checks', wall: 'frame', folder: 'folder',
     comment: 'message-circle', aiimage: 'sparkles', image: 'image', file: 'file', sketch: 'pen-line'
-  }[t] || 'sticky-note';
+  }[t] || 'file-text';
 }
 
 function buildItemEl(it) {
